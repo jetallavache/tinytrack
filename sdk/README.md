@@ -1,6 +1,6 @@
 # tinytsdk
 
-JavaScript/TypeScript SDK for the [TinyTrack](https://github.com/jetallavache/tiny-track) monitoring system.
+JavaScript/TypeScript SDK for the [TinyTrack](https://github.com/jetallavache/tinytrack) monitoring system.
 
 ## Packages
 
@@ -20,7 +20,7 @@ npm install tinytsdk
 ```ts
 import { TinyTrackClient, RING_L1 } from 'tinytsdk';
 
-const client = new TinyTrackClient('ws://localhost:4026');
+const client = new TinyTrackClient('ws://<hostname>:25015');
 
 client.on('metrics', m => {
   console.log(`CPU: ${m.cpu / 100}%  MEM: ${m.mem / 100}%`);
@@ -40,8 +40,8 @@ client.connect();
 
 ```html
 <script type="module">
-  import { TinyTrackClient } from 'https://cdn.jsdelivr.net/npm/tinytsdk/dist/index.esm.js';
-  const client = new TinyTrackClient('ws://your-server:4026');
+  import { TinyTrackClient } from 'https://cdn.jsdelivr.net/npm/tinytsdk/dist/tinytsdk.min.js';
+  const client = new TinyTrackClient('ws://<hostname>:25015');
   client.on('metrics', m => console.log(m));
   client.connect();
 </script>
@@ -54,7 +54,7 @@ import { TinyTrackProvider, useTinyTrack, MetricsPanel } from 'tinytsdk/react';
 
 function App() {
   return (
-    <TinyTrackProvider url="ws://localhost:4026">
+    <TinyTrackProvider url="ws://<hostname>:25015">
       <Dashboard />
     </TinyTrackProvider>
   );
@@ -84,7 +84,7 @@ const client = new TinyTrackClient(url, options?);
 | `reconnect` | boolean | `true` | Auto-reconnect on close |
 | `reconnectDelay` | number | `2000` | Delay between reconnects (ms) |
 | `maxRetries` | number | `0` | Max retries (0 = unlimited) |
-| `path` | string | `'/websocket'` | WebSocket path |
+| `path` | string | `'/v1/stream'` | WebSocket path |
 
 **Methods:**
 

@@ -15,10 +15,11 @@ Runs on any Linux VPS. Consumes less than 1% CPU and under 10 MB of RAM.
 [![License: MIT](https://img.shields.io/badge/license-MIT-27AE60.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/docker-hub-2496ED.svg?logo=docker&logoColor=white)](https://hub.docker.com/r/jetallavache/tinytrack)
 [![Platform: Linux](https://img.shields.io/badge/platform-Linux-E67E22.svg)](https://kernel.org/)
-[![npm version](https://img.shields.io/npm/v/tinytsdk.svg)](https://www.npmjs.com/package/tinytsdk)
-[![npm version lite](https://img.shields.io/npm/v/tinytsdk-lite.svg)](https://www.npmjs.com/package/tinytsdk-lite)
+<!-- [![npm version](https://img.shields.io/npm/v/tinytsdk.svg)](https://www.npmjs.com/package/tinytsdk)
+[![npm version lite](https://img.shields.io/npm/v/tinytsdk-lite.svg)](https://www.npmjs.com/package/tinytsdk-lite) -->
 
 [![npm](https://nodei.co/npm/tinytsdk.png)](https://www.npmjs.com/package/tinytsdk)
+[![npm](https://nodei.co/npm/tinytsdk-lite.png)](https://www.npmjs.com/package/tinytsdk-lite)
 
 ## Deploy the server
 
@@ -191,6 +192,7 @@ tiny-cli dashboard        # live ncurses dashboard
 | Configuration | [docs/ru/configuration.md](docs/ru/configuration.md) | [docs/en/configuration.md](docs/en/configuration.md) |
 | Architecture | [docs/ru/architecture.md](docs/ru/architecture.md) | [docs/en/architecture.md](docs/en/architecture.md) |
 | Troubleshooting | [docs/ru/troubleshooting.md](docs/ru/troubleshooting.md) | [docs/en/troubleshooting.md](docs/en/troubleshooting.md) |
+| SDK | [docs/ru/sdk.md](docs/ru/sdk.md) | [docs/en/sdk.md](docs/en/sdk.md) |
 
 ## Contributing
 
