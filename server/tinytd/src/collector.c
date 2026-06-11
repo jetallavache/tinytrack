@@ -48,7 +48,7 @@ static inline int direct_statvfs(const char* path, struct statvfs* buf) {
   return statvfs(path, buf);
 }
 
-bool readpr_stat(struct ttd_collector_stat* ps) {
+bool readpr_stat(struct proc_stat* ps) {
   if (g_stat_fd < 0)
     return false;
 
@@ -59,13 +59,13 @@ bool readpr_stat(struct ttd_collector_stat* ps) {
     return false;
   buf[n] = '\0';
 
-  int parsed =
-      sscanf(buf, "cpu %lu %lu %lu %lu %lu %lu %lu", &ps->user, &ps->nice,
-             &ps->system, &ps->idle, &ps->iowait, &ps->irq, &ps->softirq);
-  return (parsed == 7);
+  int parsed = sscanf(buf, "cpu %lu %lu %lu %lu %lu %lu %lu %lu", &ps->user,
+                      &ps->nice, &ps->system, &ps->idle, &ps->iowait, &ps->irq,
+                      &ps->softirq, &ps->steal);
+  return (parsed == 8);
 }
 
-bool readpr_meminf(struct ttd_collector_meminfo* pm) {
+bool readpr_meminf(struct proc_meminfo* pm) {
   if (g_meminfo_fd < 0)
     return false;
 
@@ -76,28 +76,131 @@ bool readpr_meminf(struct ttd_collector_meminfo* pm) {
     return false;
   buf[n] = '\0';
 
-  bool found_total = false, found_free = false, found_avail = false;
-  char* line = buf;
+  int parsed = 0;
+  char* p = buf;
   char* end = buf + n;
 
-  while (line < end) {
-    if (sscanf(line, "MemTotal: %lu", &pm->total) == 1)
-      found_total = true;
-    else if (sscanf(line, "MemFree: %lu", &pm->free) == 1)
-      found_free = true;
-    else if (sscanf(line, "MemAvailable: %lu", &pm->available) == 1)
-      found_avail = true;
+  while (p < end && parsed < 20) {
+    while (p < end && (*p == ' ' || *p == '\t' || *p == '\n'))
+      p++;
+    if (p >= end) break;
 
-    if (found_total && found_free && found_avail)
-      break;
+    unsigned int hash = 0;
+    unsigned int key_len = 0;
+    char* key_start = p;
 
-    NEXT_LINE(line);
+    while (p < end && *p != ':') {
+      hash = hash * 31 + *p;
+      key_len++;
+      p++;
+    }
+
+    if (p >= end || *p != ':') break;
+    p++;
+
+    while (p < end && (*p == ' ' || *p == '\t'))
+      p++;
+    if (p >= end) break;
+
+    unsigned long value = 0;
+    while (p < end && *p >= '0' && *p <= '9') {
+      value = value * 10 + (*p - '0');
+      p++;
+    }
+
+    while (p < end && *p != '\n')
+      p++;
+    if (p < end) p++;
+
+    switch (hash) {
+      case 3697542799:
+        if (key_len == 8)
+          pm->mem_total = value, parsed++;
+        break;
+      case 2612712897:
+        if (key_len == 7)
+          pm->mem_free = value, parsed++;
+        break;
+      case 1570904212:
+        if (key_len == 12)
+          pm->mem_available = value, parsed++;
+        break;
+      case 1892650003:
+        if (key_len == 7)
+          pm->buffers = value, parsed++;
+        break;
+      case 2010787138:
+        if (key_len == 6)
+          pm->cached = value, parsed++;
+        break;
+      case 411394229:
+        if (key_len == 10)
+          pm->swap_cached = value, parsed++;
+        break;
+      case 1955883814:
+        if (key_len == 6)
+          pm->active = value, parsed++;
+        break;
+      case 89309323:
+        if (key_len == 8)
+          pm->inactive = value, parsed++;
+        break;
+      case 722140497:
+        if (key_len == 9)
+          pm->swap_total = value, parsed++;
+        break;
+      case 4040752831:
+        if (key_len == 8)
+          pm->swap_free = value, parsed++;
+        break;
+      case 66040754:
+        if (key_len == 5)
+          pm->dirty = value, parsed++;
+        break;
+      case 598045990:
+        if (key_len == 9)
+          pm->writeback = value, parsed++;
+        break;
+      case 4164893752:
+        if (key_len == 9)
+          pm->anon_pages = value, parsed++;
+        break;
+      case 2297473619:
+        if (key_len == 6)
+          pm->mapped = value, parsed++;
+        break;
+      case 79858496:
+        if (key_len == 5)
+          pm->shmem = value, parsed++;
+        break;
+      case 2579546:
+        if (key_len == 4)
+          pm->slab = value, parsed++;
+        break;
+      case 2128625776:
+        if (key_len == 12)
+          pm->s_reclaimable = value, parsed++;
+        break;
+      case 1372541469:
+        if (key_len == 10)
+          pm->s_unreclaim = value, parsed++;
+        break;
+      case 1159547947:
+        if (key_len == 11)
+          pm->kernel_stack = value, parsed++;
+        break;
+      case 3291218420:
+        if (key_len == 10)
+          pm->page_tables = value, parsed++;
+        break;
+    }
   }
 
-  return (found_total && found_free && found_avail);
+  return (parsed == 20);
 }
 
-bool readpr_net(struct ttd_collector_net* pn) {
+
+bool readpr_net(struct proc_net* pn) {
   if (g_net_fd < 0)
     return false;
 
@@ -140,7 +243,7 @@ bool readpr_net(struct ttd_collector_net* pn) {
   return true;
 }
 
-bool readpr_loadavg(struct ttd_collector_loadavg* pl) {
+bool readpr_loadavg(struct proc_loadavg* pl) {
   if (g_loadavg_fd < 0)
     return false;
 
@@ -157,48 +260,68 @@ bool readpr_loadavg(struct ttd_collector_loadavg* pl) {
 }
 
 float ttd_collect_cpu(struct ttd_collector_state* st) {
-  struct ttd_collector_stat curr;
+  struct proc_stat curr;
   if (!readpr_stat(&curr))
     return 0.0f;
-
-  unsigned long prev_idle = st->stat_prev.idle + st->stat_prev.iowait;
-  unsigned long curr_idle = curr.idle + curr.iowait;
 
   unsigned long prev_total = st->stat_prev.user + st->stat_prev.nice +
                              st->stat_prev.system + st->stat_prev.idle +
                              st->stat_prev.iowait + st->stat_prev.irq +
-                             st->stat_prev.softirq;
+                             st->stat_prev.softirq + st->stat_prev.steal;
+
   unsigned long curr_total = curr.user + curr.nice + curr.system + curr.idle +
-                             curr.iowait + curr.irq + curr.softirq;
+                             curr.iowait + curr.irq + curr.softirq + curr.steal;
 
   unsigned long total_diff = curr_total - prev_total;
-  unsigned long idle_diff = curr_idle - prev_idle;
+
+  if (total_diff == 0) {
+    return 0.0f;
+  } else {
+    st->p.total_pct =
+        (total_diff - ((curr.idle + curr.iowait) -
+                       (st->stat_prev.idle + st->stat_prev.iowait))) *
+        100.0f / total_diff;
+    st->p.user_pct = (curr.user - st->stat_prev.user) * 100.0f / total_diff;
+    st->p.nice_pct = (curr.nice - st->stat_prev.nice) * 100.0f / total_diff;
+    st->p.system_pct =
+        (curr.system - st->stat_prev.system) * 100.0f / total_diff;
+    st->p.idle_pct = (curr.idle - st->stat_prev.idle) * 100.0f / total_diff;
+    st->p.iowait_pct =
+        (curr.iowait - st->stat_prev.iowait) * 100.0f / total_diff;
+    st->p.irq_pct = (curr.irq - st->stat_prev.irq) * 100.0f / total_diff;
+    st->p.softirq_pct =
+        (curr.softirq - st->stat_prev.softirq) * 100.0f / total_diff;
+    st->p.steal_pct = (curr.steal - st->stat_prev.steal) * 100.0f / total_diff;
+  }
 
   st->stat_prev = curr;
 
-  if (total_diff == 0)
-    return 0.0f;
-  return (float)(total_diff - idle_diff) * 100.0f / total_diff;
+  return st->p.total_pct;
 }
 
 float ttd_collect_memory(void) {
-  struct ttd_collector_meminfo mem;
+  struct proc_meminfo mem;
   if (!readpr_meminf(&mem))
     return 0.0f;
 
-  if (mem.total == 0)
+  if (mem.mem_total == 0)
     return 0.0f;
-  return (float)(mem.total - mem.available) * 100.0f / mem.total;
+
+  return (float)(mem.mem_total - mem.mem_available) * 100.0f / mem.mem_total;
 }
 
 void ttd_collect_net(struct ttd_collector_state* st, unsigned long* rx,
                      unsigned long* tx) {
-  struct ttd_collector_net curr;
+  struct proc_net curr;
   if (!readpr_net(&curr)) {
     *rx = *tx = 0;
     return;
   }
 
+  /**
+   * Calculate rate (per 1 sec!) of change rx/tx,
+   * but we just need to get the raw data and store it in this form in the tsdb.
+   */
   time_t now = time(NULL);
   time_t elapsed = now - st->net_time_prev;
 
@@ -219,8 +342,8 @@ void ttd_collect_net(struct ttd_collector_state* st, unsigned long* rx,
   st->net_time_prev = now;
 }
 
-struct ttd_collector_loadavg ttd_collect_loadavg(void) {
-  struct ttd_collector_loadavg load = {0};
+struct proc_loadavg ttd_collect_loadavg(void) {
+  struct proc_loadavg load = {0};
   readpr_loadavg(&load);
   return load;
 }
