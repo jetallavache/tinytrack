@@ -6,7 +6,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/server/tinytd/tinytd",
-            "args": ["-c", "etc/tinytrack.conf-debug"],
+            "args": ["-c", "etc/tinytrack.conf-debug", "-n"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/server",
             "environment": [
