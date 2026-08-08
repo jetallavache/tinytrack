@@ -1,9 +1,9 @@
 [tinytd]
-log_level   = info
+log_level   = debug
 log_backend = stderr
 
 [collection]
-interval_ms     = 500
+interval_ms     = 2000
 du_interval_sec = 10
 proc_root       = /proc
 rootfs_path     = /
@@ -18,8 +18,10 @@ file_mode                = 420
 l1_capacity         = 20
 l2_capacity         = 10
 l3_capacity         = 5
+le_capacity         = 10
 l2_agg_interval_sec = 10
 l3_agg_interval_sec = 60
+le_check_interval_sec = 2
 
 [recovery]
 enable_crc   = false

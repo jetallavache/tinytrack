@@ -63,7 +63,7 @@ void ttg_reader_close(struct ttg_reader* ctx) {
   ttr_reader_close(&ctx->ring);
 }
 
-/*
+/**
  * Check if tinytd is alive by inspecting the mmap header.
  *
  * Strategy:
@@ -71,9 +71,8 @@ void ttg_reader_close(struct ttg_reader* ctx) {
  * kill(pid,0)
  *   2. Check last_update_ts — if older than 3 * interval_ms, daemon is stale
  *
- * Returns:
- *   0  — daemon is alive and writing
- *  -1  — mmap exists but daemon appears dead (stale or pid gone)
+ * @return 0  — daemon is alive and writing
+ * @return -1  — mmap exists but daemon appears dead (stale or pid gone)
  */
 int ttg_reader_check_liveness(struct ttg_reader* ctx) {
   const struct ttr_header* hdr = (const struct ttr_header*)ctx->ring.addr;

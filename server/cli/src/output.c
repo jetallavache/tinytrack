@@ -70,14 +70,15 @@ static char sparkchar(double pct) {
 void ttc_print_metrics(const struct ttc_ctx* ctx, const struct tt_metrics* m) {
   char ts[16], rx[16], tx[16], total[16], free_[16];
   ttc_fmt_ts(m->timestamp, ts, sizeof(ts));
-  ttc_fmt_bytes(m->net_rx, rx, sizeof(rx));
-  ttc_fmt_bytes(m->net_tx, tx, sizeof(tx));
+  ttc_fmt_bytes(m->net_rx_bytes, rx, sizeof(rx));
+  ttc_fmt_bytes(m->net_tx_bytes, tx, sizeof(tx));
   ttc_fmt_bytes(m->du_total_bytes, total, sizeof(total));
   ttc_fmt_bytes(m->du_free_bytes, free_, sizeof(free_));
 
-  double cpu = m->cpu_usage / 100.0;
-  double mem = m->mem_usage / 100.0;
-  double disk = m->du_usage / 100.0;
+  double cpu = m->cpu_usage_pct / 100.0;
+  double mem = m->mem_usage_pct / 100.0;
+  double disk =
+      ((m->du_total_bytes - m->du_free_bytes) * 100 / m->du_total_bytes);
   double load = m->load_1min / 100.0;
 
   if (ctx->format == FMT_JSON) {
@@ -85,8 +86,8 @@ void ttc_print_metrics(const struct ttc_ctx* ctx, const struct tt_metrics* m) {
     printf("  \"timestamp\": %llu,\n", (unsigned long long)m->timestamp);
     printf("  \"cpu\": %.2f,\n", cpu);
     printf("  \"mem\": %.2f,\n", mem);
-    printf("  \"net_rx_bps\": %u,\n", m->net_rx);
-    printf("  \"net_tx_bps\": %u,\n", m->net_tx);
+    printf("  \"net_rx_bytes_bps\": %u,\n", m->net_rx_bytes);
+    printf("  \"net_tx_bytes_bps\": %u,\n", m->net_tx_bytes);
     printf("  \"load_1m\": %.2f,\n", load);
     printf("  \"load_5m\": %.2f,\n", m->load_5min / 100.0);
     printf("  \"load_15m\": %.2f,\n", m->load_15min / 100.0);

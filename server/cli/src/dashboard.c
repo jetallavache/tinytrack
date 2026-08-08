@@ -153,13 +153,13 @@ static void draw_sparkline(WINDOW* w, int y, int x, int width,
 }
 
 static double get_cpu(const struct tt_metrics* m) {
-  return m->cpu_usage / 100.0;
+  return m->cpu_usage_pct / 100.0;
 }
 static double get_mem(const struct tt_metrics* m) {
-  return m->mem_usage / 100.0;
+  return m->mem_usage_pct / 100.0;
 }
 static double get_disk(const struct tt_metrics* m) {
-  return m->du_usage / 100.0;
+  return ((m->du_total_bytes - m->du_free_bytes) * 100 / m->du_total_bytes);
 }
 
 static int draw_metric_row(WINDOW* w, int row, int bar_w, const char* label,
@@ -205,16 +205,18 @@ static void draw_metrics(WINDOW* w, int row, int cols,
   wattroff(w, COLOR_PAIR(CP_TITLE) | A_BOLD);
   row++;
 
-  row = draw_metric_row(w, row, bar_w, "CPU", m->cpu_usage / 100.0, 70, 90,
+  row = draw_metric_row(w, row, bar_w, "CPU", m->cpu_usage_pct / 100.0, 70, 90,
                         hist, hcount, get_cpu);
-  row = draw_metric_row(w, row, bar_w, "MEM", m->mem_usage / 100.0, 80, 95,
+  row = draw_metric_row(w, row, bar_w, "MEM", m->mem_usage_pct / 100.0, 80, 95,
                         hist, hcount, get_mem);
-  row = draw_metric_row(w, row, bar_w, "DISK", m->du_usage / 100.0, 80, 95,
-                        hist, hcount, get_disk);
+  row = draw_metric_row(
+      w, row, bar_w, "DISK",
+      ((m->du_total_bytes - m->du_free_bytes) * 100 / m->du_total_bytes), 80,
+      95, hist, hcount, get_disk);
 
   char rx[16], tx[16];
-  fmt_bytes(m->net_rx, rx, sizeof(rx));
-  fmt_bytes(m->net_tx, tx, sizeof(tx));
+  fmt_bytes(m->net_rx_bytes, rx, sizeof(rx));
+  fmt_bytes(m->net_tx_bytes, tx, sizeof(tx));
   mvwprintw(w, row, 1, "NET");
   wattron(w, COLOR_PAIR(CP_OK));
   mvwprintw(w, row, 7, "RX %-8s/s", rx);

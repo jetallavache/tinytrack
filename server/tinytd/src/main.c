@@ -10,12 +10,13 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "collector.h"
 #include "common/config.h"
 #include "common/log/log.h"
 #include "common/sysfs.h"
 #include "config.h"
+#include "fetch.h"
 #include "runtime.h"
+#include "watch.h"
 #include "writer.h"
 
 static volatile sig_atomic_t running = 1;
@@ -103,11 +104,14 @@ static int drop_privileges(const char* user, const char* group) {
   return 0;
 }
 
-static void cleanup(struct ttd_runtime* rt, struct ttd_collector_state* cst,
-                    struct ttd_writer* writer, const char* pid_file) {
-  (void)cst;
+static void cleanup(struct ttd_runtime* rt, struct ttd_fetch* fch,
+                    struct ttd_watch* watch, struct ttd_writer* writer,
+                    const char* pid_file) {
+  (void)fch;
+  (void)watch;
   ttd_runtime_free(rt);
-  ttd_collector_cleanup();
+  ttd_fetch_cleanup();
+  ttd_watch_cleanup();
   ttd_writer_cleanup(writer);
   if (pid_file)
     unlink(pid_file);
@@ -116,7 +120,8 @@ static void cleanup(struct ttd_runtime* rt, struct ttd_collector_state* cst,
 int main(int argc, char** argv) {
   struct ttd_config cfg = {0};
   struct ttd_writer writer = {0};
-  struct ttd_collector_state cst = {0};
+  struct ttd_fetch fch = {0};
+  struct ttd_watch watch = {0};
   struct ttd_runtime rt = {0};
   int do_daemonize = 1;
   const char* config_path = NULL;
@@ -200,11 +205,20 @@ int main(int argc, char** argv) {
   signal(SIGTERM, signal_handler);
   signal(SIGINT, signal_handler);
 
-  ttd_collector_init();
-  cst.du_inval = cfg.du_interval_sec;
+  struct ttd_fetch_state fch_state = {0};
+  struct ttd_trends fch_trends = {0};
+  fch.state = &fch_state;
+  fch.trends = &fch_trends;
+  ttd_fetch_init(&fch);
+  fch.state->du_inval = cfg.du_interval_sec;
 
-  if (ttd_runtime_init(&rt, &cfg, &cst, &writer) < 0) {
-    ttd_collector_cleanup();
+  struct tt_metrics watch_metrics = {0};
+  watch.recent_samples = &watch_metrics;
+  ttd_watch_init(&watch);
+
+  if (ttd_runtime_init(&rt, &cfg, &fch, &watch, &writer) < 0) {
+    ttd_fetch_cleanup();
+    ttd_watch_cleanup();
     ttd_writer_cleanup(&writer);
     return 1;
   }
@@ -228,7 +242,7 @@ int main(int argc, char** argv) {
       tt_log_err(
           "           See "
           "https://tinytrack.dev/docs/troubleshooting#drop-privileges");
-      cleanup(&rt, &cst, &writer, cfg.pid_file);
+      cleanup(&rt, &fch, &watch, &writer, cfg.pid_file);
       return 1;
     }
     tt_log_info("Privileges user=%s  group=%s", cfg.user, cfg.group);
@@ -254,7 +268,7 @@ int main(int argc, char** argv) {
     ttd_runtime_poll(&rt, 1000);
 
   tt_log_notice("tinytd shutting down...");
-  cleanup(&rt, &cst, &writer, cfg.pid_file);
+  cleanup(&rt, &fch, &watch, &writer, cfg.pid_file);
   tt_log_shutdown();
 
   return 0;

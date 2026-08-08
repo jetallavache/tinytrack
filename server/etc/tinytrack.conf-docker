@@ -67,6 +67,8 @@ l2_capacity         = 1440
 l2_agg_interval_sec = 60
 l3_capacity         = 720
 l3_agg_interval_sec = 3600
+le_capacity         = 10000
+le_check_interval_sec = 500
 
 
 [recovery]

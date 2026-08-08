@@ -59,6 +59,11 @@ int ttd_config_load(const char* path, struct ttd_config* cfg) {
   cfg->l3_agg_interval_sec =
       tt_config_read_int(path, "ringbuffer.l3_agg_interval_sec", 3600);
 
+  /* LE */
+  cfg->le_capacity = tt_config_read_int(path, "ringbuffer.le_capacity", 1000);
+  cfg->le_check_interval_sec =
+      tt_config_read_int(path, "ringbuffer.le_check_interval_sec", 300);
+
   /* [recovery] */
   cfg->enable_crc = tt_config_read_bool(path, "recovery.enable_crc", true);
   cfg->auto_recover = tt_config_read_bool(path, "recovery.auto_recover", true);

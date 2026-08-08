@@ -30,8 +30,10 @@ struct ttd_config {
   uint32_t l1_capacity;
   uint32_t l2_capacity;
   uint32_t l3_capacity;
+  uint32_t le_capacity;
   uint32_t l2_agg_interval_sec;
   uint32_t l3_agg_interval_sec;
+  uint32_t le_check_interval_sec;
 
   /* Recovery */
   bool enable_crc;

@@ -27,6 +27,12 @@ static void init_level_ptrs(struct ttr_reader* ctx) {
       (struct ttr_meta*)(base + ttr_layout_l3_meta_offset(
                                     l1cap, ctx->l2_meta->capacity, cs));
   ctx->l3_data = base + ttr_layout_l3_offset(l1cap, ctx->l2_meta->capacity, cs);
+
+  ctx->le_meta = (struct ttr_meta*)(base + ttr_layout_le_meta_offset(
+                                               l1cap, ctx->l2_meta->capacity,
+                                               ctx->l3_meta->capacity, cs));
+  ctx->le_data = base + ttr_layout_le_offset(l1cap, ctx->l2_meta->capacity,
+                                             ctx->l3_meta->capacity, cs);
 }
 
 static int level_ptrs(const struct ttr_reader* ctx, int level,
@@ -43,6 +49,10 @@ static int level_ptrs(const struct ttr_reader* ctx, int level,
     case 3:
       *meta = ctx->l3_meta;
       *data = ctx->l3_data;
+      break;
+    case 4:
+      *meta = ctx->le_meta;
+      *data = ctx->le_data;
       break;
     default:
       return TTR_READER_ERR_INVALID;

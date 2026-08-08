@@ -75,6 +75,11 @@ static struct ttr_meta* level_meta(const struct ttr_writer* ctx, int level) {
       return (struct ttr_meta*)(base + ttr_layout_l3_meta_offset(
                                            ctx->cfg.l1_capacity,
                                            ctx->cfg.l2_capacity, cs));
+    case 4:
+      return (struct ttr_meta*)(base + ttr_layout_le_meta_offset(
+                                           ctx->cfg.l1_capacity,
+                                           ctx->cfg.l2_capacity,
+                                           ctx->cfg.l3_capacity, cs));
     default:
       return NULL;
   }
@@ -91,6 +96,10 @@ static uint8_t* level_data(const struct ttr_writer* ctx, int level) {
     case 3:
       return base + ttr_layout_l3_offset(ctx->cfg.l1_capacity,
                                          ctx->cfg.l2_capacity, cs);
+    case 4:
+      return base + ttr_layout_le_offset(ctx->cfg.l1_capacity,
+                                         ctx->cfg.l2_capacity,
+                                         ctx->cfg.l3_capacity, cs);
     default:
       return NULL;
   }
@@ -162,8 +171,9 @@ int ttr_writer_init(struct ttr_writer* ctx,
   ctx->cfg = *cfg;
   ctx->dirty_min = SIZE_MAX;
   ctx->dirty_max = 0;
-  ctx->total_size = tt_layout_total_size(cfg->l1_capacity, cfg->l2_capacity,
-                                         cfg->l3_capacity, cfg->cell_size);
+  ctx->total_size =
+      tt_layout_total_size(cfg->l1_capacity, cfg->l2_capacity, cfg->l3_capacity,
+                           cfg->le_capacity, cfg->cell_size);
 
   if ((intptr_t)(ctx->live_addr = ttr_shm_create(
                      cfg->live_path, ctx->total_size, cfg->file_mode)) < 0) {
@@ -188,23 +198,28 @@ int ttr_writer_init(struct ttr_writer* ctx,
     hdr->interval_ms = cfg->interval_ms;
     hdr->l2_agg_interval_ms = cfg->l2_agg_interval_ms;
     hdr->l3_agg_interval_ms = cfg->l3_agg_interval_ms;
+    hdr->le_check_interval_ms = cfg->le_check_interval_ms;
     hdr->last_update_ts = hdr->last_shadow_sync_ts = get_timestamp_ms();
 
     init_meta(level_meta(ctx, 1), cfg->l1_capacity, cfg->cell_size);
     init_meta(level_meta(ctx, 2), cfg->l2_capacity, cfg->cell_size);
     init_meta(level_meta(ctx, 3), cfg->l3_capacity, cfg->cell_size);
+    init_meta(level_meta(ctx, 4), cfg->le_capacity, cfg->cell_size);
 
     msync(ctx->live_addr, ctx->total_size, MS_SYNC);
     ctx->dirty_min = 0;
     ctx->dirty_max = ctx->total_size;
   }
-  /* Hint kernel: L1 is accessed randomly (latest sample), L2/L3 sequentially.
-   * madvise/MADV_* require _GNU_SOURCE; guard with #ifdef for strict C11. */
+  /* Hint kernel: L1 is accessed randomly (latest sample), L2/L3/LE
+   * sequentially. madvise/MADV_* require _GNU_SOURCE; guard with #ifdef for
+   * strict C11. */
 #if defined(MADV_RANDOM) && defined(MADV_SEQUENTIAL)
   madvise(level_data(ctx, 1), cfg->l1_capacity * cfg->cell_size, MADV_RANDOM);
   madvise(level_data(ctx, 2), cfg->l2_capacity * cfg->cell_size,
           MADV_SEQUENTIAL);
   madvise(level_data(ctx, 3), cfg->l3_capacity * cfg->cell_size,
+          MADV_SEQUENTIAL);
+  madvise(level_data(ctx, 4), cfg->le_capacity * cfg->cell_size,
           MADV_SEQUENTIAL);
 #endif
 
@@ -243,11 +258,13 @@ int ttr_writer_write_l1(struct ttr_writer* ctx, const void* sample) {
   mark_dirty(ctx, TTR_HEADER_SIZE + TTR_CONSUMER_TABLE_SIZE, TTR_META_SIZE);
   mark_dirty(ctx, ttr_layout_l1_offset() + head * cs, cs);
 
+  /* Подумать над тем, как оптимизировать. Говорят, это излишне, вызывать каждый
+   * раз */
   msync(ctx->live_addr, ctx->total_size, MS_ASYNC);
   return TTR_WRITER_OK;
 }
 
-/* Aggregate src_level → dst_level using ctx->cfg.aggregate callback */
+/* Aggregate src_level -> dst_level using ctx->cfg.aggregate callback */
 static int ring_aggregate(struct ttr_writer* ctx, int src_level,
                           int dst_level) {
   size_t cs = ctx->cfg.cell_size;
@@ -277,7 +294,7 @@ static int ring_aggregate(struct ttr_writer* ctx, int src_level,
     free(tmp);
     return TTR_WRITER_ERR_NULL;
   }
-  ctx->cfg.aggregate(tmp, n, cs, agg);
+  ctx->cfg.aggregate(tmp, n, cs, agg, ctx->cfg.reduce_actions);
   free(tmp);
 
   ttr_seqlock_write_begin(&dst->seq);
@@ -308,6 +325,45 @@ int ttr_writer_aggregate_l3(struct ttr_writer* ctx) {
     return TTR_WRITER_ERR_NULL;
   }
   return ring_aggregate(ctx, 2, 3);
+}
+
+int ttr_writer_write_le(struct ttr_writer* ctx, const void* sample) {
+  if (!ctx || !ctx->live_addr || !sample) {
+    tt_log_err("ttr_writer_write_le: NULL argument");
+    return TTR_WRITER_ERR_NULL;
+  }
+  size_t cs = ctx->cfg.cell_size;
+  struct ttr_header* hdr = (struct ttr_header*)ctx->live_addr;
+  hdr->last_update_ts = get_timestamp_ms();
+
+  struct ttr_meta* meta = level_meta(ctx, 4);
+  uint8_t* data = level_data(ctx, 4);
+
+  ttr_seqlock_write_begin(&meta->seq);
+  uint32_t head = meta->head;
+  memcpy(data + head * cs, sample, cs);
+  meta->last_ts = hdr->last_update_ts;
+  if (meta->first_ts == 0)
+    meta->first_ts = meta->last_ts;
+  meta->head = (head + 1) % meta->capacity;
+  ttr_seqlock_write_end(&meta->seq);
+
+  mark_dirty(ctx, 0, TTR_HEADER_SIZE);
+  mark_dirty(
+      ctx,
+      ttr_layout_le_meta_offset(ctx->cfg.l1_capacity, ctx->cfg.l2_capacity,
+                                ctx->cfg.l3_capacity, cs),
+      TTR_META_SIZE);
+  mark_dirty(ctx,
+             ttr_layout_le_offset(ctx->cfg.l1_capacity, ctx->cfg.l2_capacity,
+                                  ctx->cfg.l3_capacity, cs) +
+                 head * cs,
+             cs);
+
+  /* Подумать над тем, как оптимизировать. Говорят, это излишне, вызывать каждый
+   * раз */
+  msync(ctx->live_addr, ctx->total_size, MS_ASYNC);
+  return TTR_WRITER_OK;
 }
 
 int ttr_writer_shadow_sync(struct ttr_writer* ctx) {

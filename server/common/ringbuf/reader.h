@@ -22,9 +22,11 @@ struct ttr_reader {
   struct ttr_meta* l1_meta;
   struct ttr_meta* l2_meta;
   struct ttr_meta* l3_meta;
+  struct ttr_meta* le_meta;
   uint8_t* l1_data;
   uint8_t* l2_data;
   uint8_t* l3_data;
+  uint8_t* le_data;
 };
 
 int ttr_reader_open(struct ttr_reader* ctx, const char* path);

@@ -7,9 +7,13 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "common/event.h"
 #include "common/log/log.h"
 #include "common/timer.h"
 #include "debug.h"
+#include "mem.h"
+
+#define tt_metrics tt_metrics_ex
 
 static uint64_t now_ms(void) {
   struct timeval tv;
@@ -17,38 +21,107 @@ static uint64_t now_ms(void) {
   return (uint64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
 }
 
-static void collect_metrics(struct ttd_collector_state* state,
-                            struct tt_metrics* sample) {
-  if (!state || !sample) {
-    tt_log_err("Invalid parameters to collect_metrics");
+// void check_and_emit_events(struct tt_metrics* current,
+//                            struct tt_metrics* previous) {
+//   /* Проверяем изменение состояния памяти */
+//   if (current->mem_state_flags != previous->mem_state_flags) {
+//     uint16_t changed_bits =
+//         current->mem_state_flags ^ previous->mem_state_flags;
+
+//     /* Определяем, какие аспекты изменились */
+//     if (changed_bits & 0x0003) { /* availability изменилась */
+//       tt_event_emit(TT_EVENT_STATE_CHANGE, COMPONENT_MEM,
+//                     current->mem_state_flags & 0x0003);
+//     }
+
+// #define MEM_AVAIL_RED 3
+
+//     /* Проверяем на критические события */
+//     if ((current->mem_state_flags & 0x0003) == MEM_AVAIL_RED) {
+//       tt_event_emit(TT_EVENT_MEM_PRESSURE_HIGH, COMPONENT_MEM,
+//                     current->mem_usage_pct);
+//     }
+//   }
+
+//   /* Детектируем утечку памяти (нужен контекст из нескольких измерений) */
+//   // if (detect_memory_leak(last_n_measurements)) {
+//   //     tt_event_emit(TT_EVENT_MEM_LEAK_DETECTED,
+//   //               COMPONENT_MEM,
+//   //               calculate_leak_rate());
+//   // }
+
+//   /* Детектируем swap thrashing */
+//   // if (is_swap_thrashing(current, previous)) {
+//   //     tt_event_emit(TT_EVENT_MEM_SWAP_THRASHING,
+//   //               COMPONENT_MEM,
+//   //               current->mem_usage_pct);
+//   // }
+// }
+
+static void fetch_metrics(struct ttd_fetch* fch, struct tt_metrics* sample) {
+  if (!fch || !sample) {
+    tt_log_err("Invalid parameters to fetch_metrics");
     return;
   }
 
-  sample->cpu_usage = (uint16_t)(ttd_collect_cpu(state) * 100);
-  sample->mem_usage = (uint16_t)(ttd_collect_memory() * 100);
+  int ret = 0;
 
-  unsigned long rx, tx;
-  ttd_collect_net(state, &rx, &tx);
-  sample->net_rx = rx;
-  sample->net_tx = tx;
+  ret = ttd_fetch_cpu(fch);
+  if (ret < 0) {
+    tt_log_err("Failed to retrieve data from /proc/stat");
+  } else
+    sample->cpu_usage_pct = (uint16_t)(fch->state->pr_stat_pct.total_pct * 100);
 
-  struct ttd_collector_loadavg load = ttd_collect_loadavg();
-  sample->load_1min = (uint16_t)(load.load_1min * 100);
-  sample->load_5min = (uint16_t)(load.load_5min * 100);
-  sample->load_15min = (uint16_t)(load.load_15min * 100);
-  sample->nr_running = load.nr_running;
-  sample->nr_total = load.nr_total;
+  ret = ttd_fetch_memory(fch);
+  if (ret < 0) {
+    tt_log_err("Failed to retrieve data from /proc/meminfo");
+  } else {
+    sample->mem_usage_pct = (uint16_t)(((fch->pr_meminfo.mem_total -
+                                         fch->pr_meminfo.mem_available) *
+                                        100 / fch->pr_meminfo.mem_total) *
+                                       100);
+    sample->mem_state_flags = ttd_mem_state(fch);
+  }
 
-  struct ttd_collector_du du = ttd_collect_disk(state);
-  sample->du_usage = (uint16_t)(du.usage * 100);
-  sample->du_total_bytes = du.total_bytes;
-  sample->du_free_bytes = du.free_bytes;
+  ret = ttd_fetch_net(fch);
+  if (ret < 0) {
+    tt_log_err("Failed to retrieve data from /proc/net");
+  } else {
+    sample->net_rx_bytes = (uint64_t)fch->pr_net.rx_bytes;
+    sample->net_tx_bytes = (uint64_t)fch->pr_net.tx_bytes;
+  }
+
+  ret = ttd_fetch_loadavg(fch);
+  if (ret < 0) {
+    tt_log_err("Failed to retrieve data from /proc/loadavg");
+  } else {
+    sample->load_1min = (uint16_t)(fch->pr_loadavg.load_1min * 100);
+    sample->load_5min = (uint16_t)(fch->pr_loadavg.load_5min * 100);
+    sample->load_15min = (uint16_t)(fch->pr_loadavg.load_15min * 100);
+    sample->nr_running = (uint32_t)fch->pr_loadavg.nr_running;
+    sample->nr_total = (uint32_t)fch->pr_loadavg.nr_total;
+  }
+
+  ret = ttd_fetch_disk(fch);
+  if (ret < 0) {
+    tt_log_err("Failed to retrieve data from statvfs");
+  } else {
+    sample->du_total_bytes = (uint64_t)fch->state->du_cached.total_bytes;
+    sample->du_free_bytes = (uint64_t)fch->state->du_cached.free_bytes;
+  }
+
+  ret = ttd_fetch_oom_kills(fch);
+  if (ret < 0) {
+    tt_log_err("Failed to retrieve data from /proc/vmstat");
+  } else {
+    sample->oom_kill_count = (uint16_t)fch->pr_vmstat.oom_kill;
+  }
 }
 
 int ttd_runtime_init(struct ttd_runtime* rt, struct ttd_config* cfg,
-                     struct ttd_collector_state* state,
+                     struct ttd_fetch* fch, struct ttd_watch* watch,
                      struct ttd_writer* writer) {
-  if (!rt || !cfg || !state || !writer) {
+  if (!rt || !cfg || !fch || !writer) {
     tt_log_err("Invalid parameters to ttd_runtime_init");
     return -1;
   }
@@ -56,14 +129,16 @@ int ttd_runtime_init(struct ttd_runtime* rt, struct ttd_config* cfg,
   rt->epoll_fd = -1;
   rt->timer_fd = -1;
   rt->cfg = cfg;
-  rt->state = state;
+  rt->fch = fch;
+  rt->watch = watch;
   rt->writer = writer;
   rt->next_l2 = 0;
   rt->next_l3 = 0;
+  rt->next_le = 0;
   rt->next_shadow = 0;
 
-  tt_log_debug("Runtime init: rt=%p, cfg=%p, state=%p, writer=%p", (void*)rt,
-               (void*)cfg, (void*)state, (void*)writer);
+  tt_log_debug("Runtime init: rt=%p, cfg=%p, fch=%p, writer=%p", (void*)rt,
+               (void*)cfg, (void*)fch, (void*)writer);
 
   /* Create epoll */
   rt->epoll_fd = epoll_create1(EPOLL_CLOEXEC);
@@ -118,15 +193,19 @@ void ttd_runtime_poll(struct ttd_runtime* rt, int timeout_ms) {
     /* tt_log_debug("Timer fired, collecting metrics (rt=%p, writer=%p)",
                  (void*)rt, (void*)rt->writer); */
 
-    struct tt_metrics sample = {0};
-    sample.timestamp = (uint64_t)time(NULL) * 1000;
-    collect_metrics(rt->state, &sample);
+    struct tt_metrics m = {0};
+    m.timestamp = (uint64_t)time(NULL) * 1000;
+    fetch_metrics(rt->fch, &m);
 
-    ttd_debug_dump_collector(&sample);
-
-    ttd_writer_write_l1(rt->writer, &sample);
+    ttd_writer_write_l1(rt->writer, &m);
 
     ttd_debug_dump_l1(rt->writer->ring.live_addr, rt->cfg->l1_capacity);
+
+    if (tt_timer_expired(&rt->next_le, rt->cfg->le_check_interval_sec * 1000,
+                         now)) {
+      ttd_watch_metrics(rt->watch, &m, rt->writer);
+      ttd_debug_dump_le(rt->writer->ring.live_addr, rt->cfg);
+    }
   }
 
   /* Periodic tasks */

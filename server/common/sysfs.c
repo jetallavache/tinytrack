@@ -17,6 +17,7 @@ static char p_stat[PATH_MAX_LEN];
 static char p_meminfo[PATH_MAX_LEN];
 static char p_net_dev[PATH_MAX_LEN];
 static char p_loadavg[PATH_MAX_LEN];
+static char p_vmstat[PATH_MAX_LEN];
 static char p_uptime[PATH_MAX_LEN];
 static char p_hostname[PATH_MAX_LEN];
 static char p_ostype[PATH_MAX_LEN];
@@ -27,6 +28,7 @@ static void build_paths(void) {
   snprintf(p_meminfo, sizeof(p_meminfo), "%s/meminfo", g_proc_root);
   snprintf(p_net_dev, sizeof(p_net_dev), "%s/net/dev", g_proc_root);
   snprintf(p_loadavg, sizeof(p_loadavg), "%s/loadavg", g_proc_root);
+  snprintf(p_vmstat, sizeof(p_vmstat), "%s/vmstat", g_proc_root);
   snprintf(p_uptime, sizeof(p_uptime), "%s/uptime", g_proc_root);
   snprintf(p_hostname, sizeof(p_hostname), "%s/sys/kernel/hostname",
            g_proc_root);
@@ -79,6 +81,9 @@ const char* tt_sysfs_net_dev(void) {
 }
 const char* tt_sysfs_loadavg(void) {
   return p_loadavg;
+}
+const char* tt_sysfs_vmstat(void) {
+  return p_vmstat;
 }
 const char* tt_sysfs_uptime(void) {
   return p_uptime;

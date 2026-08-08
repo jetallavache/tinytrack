@@ -17,6 +17,9 @@
 #include "str.h"
 #include "ws.h"
 
+#define tt_metrics tt_metrics_ex
+#define tt_agg_metrics tt_agg_metrics_ex
+
 #define WS_MARK 'W'
 
 static struct ttg_reader* g_reader;
@@ -41,10 +44,10 @@ void ttg_session_set_cors(const char* origins) {
 /*
  * Build CORS headers for a given request Origin.
  * Rules:
- *   - cors_origins empty → no CORS headers (disabled)
- *   - cors_origins == "*" → allow all (wildcard, no credentials)
- *   - otherwise → check if request Origin is in the comma-separated whitelist;
- *     if yes → reflect it back with Vary: Origin
+ *   - cors_origins empty - no CORS headers (disabled)
+ *   - cors_origins == "*" - allow all (wildcard, no credentials)
+ *   - otherwise - check if request Origin is in the comma-separated whitelist;
+ *     if yes - reflect it back with Vary: Origin
  *
  * out must be at least 256 bytes.
  */
@@ -90,7 +93,7 @@ static void cors_headers_for(const char* req_origin, char* out,
     }
     tok = end ? end + 1 : NULL;
   }
-  /* Origin not in whitelist — no CORS headers → browser blocks the request */
+  /* Origin not in whitelist — no CORS headers - browser blocks the request */
 }
 
 static void send_metrics(struct ttg_conn* c) {
@@ -108,8 +111,13 @@ static void send_metrics(struct ttg_conn* c) {
     return;
 
   uint8_t buf[sizeof(struct tt_proto_header) + sizeof(m)];
-  size_t n = ttg_proto_build(buf, sizeof(buf), TT_PROTO_V1, PKT_METRICS,
-                             (uint32_t)(m.timestamp / 1000), &m, sizeof(m));
+
+  /* Проверить так ли это на самом деле! */
+  uint8_t wire[sizeof(m)];
+  tt_metrics_ex_serialize(&m, wire);
+  size_t n =
+      ttg_proto_build(buf, sizeof(buf), TT_PROTO_V1, PKT_METRICS,
+                      (uint32_t)(m.timestamp / 1000), &wire, sizeof(wire));
   if (n > 0)
     ttg_ws_send(c, buf, n, TTG_WS_OP_BINARY);
 }
@@ -447,12 +455,14 @@ static void reply_metrics_json(struct ttg_conn* c, const struct tt_metrics* m,
            "\"procs\":{\"running\":%u,\"total\":%u},"
            "\"net\":{\"rx\":%u,\"tx\":%u}"
            "}",
-           (unsigned long long)m->timestamp, m->cpu_usage / 10000.0,
-           m->mem_usage / 10000.0, m->du_usage / 10000.0,
+           (unsigned long long)m->timestamp, m->cpu_usage_pct / 10000.0,
+           m->mem_usage_pct / 10000.0,
+           ((m->du_total_bytes - m->du_free_bytes) * 100 / m->du_total_bytes) /
+               10000.0,
            (unsigned long long)m->du_total_bytes,
            (unsigned long long)m->du_free_bytes, m->load_1min / 100.0,
            m->load_5min / 100.0, m->load_15min / 100.0, m->nr_running,
-           m->nr_total, m->net_rx, m->net_tx);
+           m->nr_total, m->net_rx_bytes, m->net_tx_bytes);
   char hdrs[320];
   snprintf(hdrs, sizeof(hdrs), "Content-Type: application/json\r\n%s", cors);
   ttg_http_reply(c, 200, hdrs, "%s", buf);
@@ -463,14 +473,17 @@ static void reply_metrics_csv(struct ttg_conn* c, const struct tt_metrics* m,
   char buf[512];
   snprintf(buf, sizeof(buf),
            "timestamp,cpu,mem,disk,disk_total,disk_free,"
-           "load_1m,load_5m,load_15m,procs_running,procs_total,net_rx,net_tx\n"
+           "load_1m,load_5m,load_15m,procs_running,procs_total,net_rx_bytes,"
+           "net_tx_bytes\n"
            "%llu,%.4f,%.4f,%.4f,%llu,%llu,%.2f,%.2f,%.2f,%u,%u,%u,%u\n",
-           (unsigned long long)m->timestamp, m->cpu_usage / 10000.0,
-           m->mem_usage / 10000.0, m->du_usage / 10000.0,
+           (unsigned long long)m->timestamp, m->cpu_usage_pct / 10000.0,
+           m->mem_usage_pct / 10000.0,
+           ((m->du_total_bytes - m->du_free_bytes) * 100 / m->du_total_bytes) /
+               10000.0,
            (unsigned long long)m->du_total_bytes,
            (unsigned long long)m->du_free_bytes, m->load_1min / 100.0,
            m->load_5min / 100.0, m->load_15min / 100.0, m->nr_running,
-           m->nr_total, m->net_rx, m->net_tx);
+           m->nr_total, m->net_rx_bytes, m->net_tx_bytes);
   char hdrs[320];
   snprintf(hdrs, sizeof(hdrs), "Content-Type: text/csv\r\n%s", cors);
   ttg_http_reply(c, 200, hdrs, "%s", buf);
@@ -489,12 +502,14 @@ static void reply_metrics_xml(struct ttg_conn* c, const struct tt_metrics* m,
            "  <procs running=\"%u\" total=\"%u\"/>\n"
            "  <net rx=\"%u\" tx=\"%u\"/>\n"
            "</metrics>\n",
-           (unsigned long long)m->timestamp, m->cpu_usage / 10000.0,
-           m->mem_usage / 10000.0, m->du_usage / 10000.0,
+           (unsigned long long)m->timestamp, m->cpu_usage_pct / 10000.0,
+           m->mem_usage_pct / 10000.0,
+           ((m->du_total_bytes - m->du_free_bytes) * 100 / m->du_total_bytes) /
+               10000.0,
            (unsigned long long)m->du_total_bytes,
            (unsigned long long)m->du_free_bytes, m->load_1min / 100.0,
            m->load_5min / 100.0, m->load_15min / 100.0, m->nr_running,
-           m->nr_total, m->net_rx, m->net_tx);
+           m->nr_total, m->net_rx_bytes, m->net_tx_bytes);
   char hdrs[320];
   snprintf(hdrs, sizeof(hdrs), "Content-Type: application/xml\r\n%s", cors);
   ttg_http_reply(c, 200, hdrs, "%s", buf);
@@ -505,9 +520,9 @@ static void reply_metrics_prometheus(struct ttg_conn* c,
                                      const char* cors) {
   char buf[2048];
   snprintf(buf, sizeof(buf),
-           "# HELP tinytrack_cpu_usage_ratio CPU usage (0..1)\n"
-           "# TYPE tinytrack_cpu_usage_ratio gauge\n"
-           "tinytrack_cpu_usage_ratio %.4f\n"
+           "# HELP tinytrack_cpu_usage_pct_ratio CPU usage (0..1)\n"
+           "# TYPE tinytrack_cpu_usage_pct_ratio gauge\n"
+           "tinytrack_cpu_usage_pct_ratio %.4f\n"
            "# HELP tinytrack_memory_usage_ratio Memory usage (0..1)\n"
            "# TYPE tinytrack_memory_usage_ratio gauge\n"
            "tinytrack_memory_usage_ratio %.4f\n"
@@ -540,16 +555,47 @@ static void reply_metrics_prometheus(struct ttg_conn* c,
            "# HELP tinytrack_scrape_timestamp_ms Timestamp of last sample ms\n"
            "# TYPE tinytrack_scrape_timestamp_ms gauge\n"
            "tinytrack_scrape_timestamp_ms %llu\n",
-           m->cpu_usage / 10000.0, m->mem_usage / 10000.0,
-           m->du_usage / 10000.0, (unsigned long long)m->du_total_bytes,
+           m->cpu_usage_pct / 10000.0, m->mem_usage_pct / 10000.0,
+           ((m->du_total_bytes - m->du_free_bytes) * 100 / m->du_total_bytes) /
+               10000.0,
+           (unsigned long long)m->du_total_bytes,
            (unsigned long long)m->du_free_bytes, m->load_1min / 100.0,
            m->load_5min / 100.0, m->load_15min / 100.0, m->nr_running,
-           m->nr_total, m->net_rx, m->net_tx, (unsigned long long)m->timestamp);
+           m->nr_total, m->net_rx_bytes, m->net_tx_bytes,
+           (unsigned long long)m->timestamp);
   char hdrs[320];
   snprintf(hdrs, sizeof(hdrs), "Content-Type: text/plain; version=0.0.4\r\n%s",
            cors);
   ttg_http_reply(c, 200, hdrs, "%s", buf);
 }
+
+/**
+ * Calculate rate (per 1 sec!) of change rx/tx,
+ * but we just need to get the raw data and store it in this form in the tsdb.
+ */
+
+/*
+function - irate()
+
+ time_t now = time(NULL);
+time_t elapsed = now - st->net_time_prev;
+
+if (elapsed > 0 && st->net_time_prev > 0) {
+  if (curr.rx_bytes >= st->pr_net_prev.rx_bytes)
+    *rx = (curr.rx_bytes - st->pr_net_prev.rx_bytes) / elapsed;
+  else
+    *rx = 0; counter reset / wrap
+  if (curr.tx_bytes >= st->pr_net_prev.tx_bytes)
+    *tx = (curr.tx_bytes - st->pr_net_prev.tx_bytes) / elapsed;
+  else
+    *tx = 0;
+} else {
+  *rx = *tx = 0;
+}
+
+st->pr_net_prev = curr;
+st->net_time_prev = now;
+ */
 
 static void reply_metrics(struct ttg_conn* c, struct ttg_http_message* hm,
                           const char* cors) {
@@ -741,7 +787,7 @@ static void on_http(struct ttg_conn* c, struct ttg_http_message* hm) {
     return;
   }
 
-  /* ── Legacy: /metrics → Prometheus, /api/metrics/live → JSON ──── */
+  /* ── Legacy: /metrics - Prometheus, /api/metrics/live - JSON ──── */
   if (is_get && ttg_str_match(hm->uri, str("/metrics"), NULL)) {
     struct tt_metrics m;
     if (ttg_reader_get_latest(g_reader, &m) == 0)

@@ -40,6 +40,7 @@ const char* tt_sysfs_stat(void);
 const char* tt_sysfs_meminfo(void);
 const char* tt_sysfs_net_dev(void);
 const char* tt_sysfs_loadavg(void);
+const char* tt_sysfs_vmstat(void);
 const char* tt_sysfs_uptime(void);
 const char* tt_sysfs_hostname(void);  /* /proc/sys/kernel/hostname */
 const char* tt_sysfs_ostype(void);    /* /proc/sys/kernel/ostype   */

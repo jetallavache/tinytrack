@@ -5,6 +5,8 @@
 #include "common/proto/v2.h"
 #include "common/ringbuf.h"
 
+#define tt_metrics tt_metrics_ex
+
 /* Wrapper around ttr_reader for tinytrack */
 struct ttg_reader {
   struct ttr_reader ring;
