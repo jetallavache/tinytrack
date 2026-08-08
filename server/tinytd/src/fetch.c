@@ -25,6 +25,7 @@ static int g_meminfo_fd = -1;
 static int g_loadavg_fd = -1;
 static int g_net_fd = -1;
 static int g_vmstat_fd = -1;
+static int g_fs_fd = -1;
 
 void ttd_fetch_init(struct ttd_fetch* fch) {
   g_stat_fd = open(tt_sysfs_stat(), O_RDONLY | O_CLOEXEC);
@@ -32,6 +33,7 @@ void ttd_fetch_init(struct ttd_fetch* fch) {
   g_loadavg_fd = open(tt_sysfs_loadavg(), O_RDONLY | O_CLOEXEC);
   g_net_fd = open(tt_sysfs_net_dev(), O_RDONLY | O_CLOEXEC);
   g_vmstat_fd = open(tt_sysfs_vmstat(), O_RDONLY | O_CLOEXEC);
+  g_fs_fd = open(tt_sysfs_fs(), O_RDONLY | O_CLOEXEC);
 
   memset(fch->state, 0, sizeof(*fch->state));
   memset(fch->trends, 0, sizeof(*fch->trends));
@@ -51,6 +53,8 @@ void ttd_fetch_cleanup(void) {
     close(g_net_fd);
   if (g_vmstat_fd >= 0)
     close(g_vmstat_fd);
+  if (g_fs_fd >= 0)
+    close(g_fs_fd);
 }
 
 /* Use the libc statvfs() wrapper. A raw syscall(SYS_statvfs) would write
@@ -215,7 +219,7 @@ bool readpr_meminf(struct proc_meminfo* pm) {
   return (parsed == 14);
 }
 
-bool readpr_net(struct proc_net* pn) {
+bool readpr_net(struct proc_net_dev* pn) {
   if (g_net_fd < 0)
     return false;
 
@@ -363,6 +367,9 @@ int ttd_fetch_disk(struct ttd_fetch* fch) {
   fch->du.free_bytes = free;
   fch->du.usage = (total > 0) ? (float)(total - free) * 100.0f / total : 0.0f;
 
+  if (vfs.f_files > 0)
+    fch->du.inodes_usage = (float)(((vfs.f_files - vfs.f_ffree) * 100.0f) / vfs.f_files);
+
   fch->state->du_cached = fch->du;
   fch->state->du_last_update = now;
 
@@ -400,6 +407,29 @@ int ttd_fetch_oom_kills(struct ttd_fetch* fch) {
 
   return 0;
 }
+
+bool readpr_fs(struct proc_sys_fs_filenr *pfs) {
+  if (g_fs_fd < 0)
+    return false;
+
+  char buf[512];
+  lseek(g_fs_fd, 0, SEEK_SET);
+  ssize_t n = read(g_fs_fd, buf, sizeof(buf) - 1);
+  if (n <= 0)
+    return false;
+  buf[n] = '\0';
+
+  int parsed = sscanf(buf, "%lu %lu %lu", &pfs->allocated, &pfs->unused, &pfs->max);
+  return (parsed == 3);
+}
+
+int ttd_fetch_fs(struct ttd_fetch* fch) {
+  if (!readpr_fs(&fch->pr_fs))
+    return -1;
+
+  return 0;
+}
+
 
 /* ... */
 
@@ -525,30 +555,4 @@ int ttd_fetch_oom_kills(struct ttd_fetch* fch) {
 
 //   m->procs_blocked = blocked;
 //   m->procs_zombie = zombie;
-// }
-
-// // Сбор file descriptor usage
-// static void collect_fd_usage(struct tt_metrics* m) {
-//   FILE* f = fopen("/proc/sys/fs/file-nr", "r");
-//   if (!f)
-//     return;
-
-//   unsigned long allocated, unused, max;
-//   if (fscanf(f, "%lu %lu %lu", &allocated, &unused, &max) == 3) {
-//     if (max > 0) {
-//       m->fd_usage_pct = (uint16_t)((allocated * 10000) / max);
-//     }
-//   }
-//   fclose(f);
-// }
-
-// // Сбор inode usage
-// static void collect_inode_usage(struct tt_metrics* m) {
-//   struct du_stat buf;
-//   if (statvfs("/", &buf) == 0) {
-//     if (buf.f_files > 0) {
-//       uint64_t used = buf.f_files - buf.f_ffree;
-//       m->inode_usage_pct = (uint16_t)((used * 10000) / buf.f_files);
-//     }
-//   }
 // }

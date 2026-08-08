@@ -431,7 +431,7 @@ static void http_cb(struct ttg_conn* c, int ev, void* ev_data) {
 
       if (n < 0) {
         /* We don't use ttg_error() here, to avoid closing pipelined requests */
-        /* prematurely, see #2592 */
+        /* prematurely */
         tt_log_err("HTTP parse, %lu bytes", c->recv.len);
         c->is_draining = 1;
         /* ttg_hexdump(buf, c->recv.len - ofs > 16 ? 16 : c->recv.len - ofs); */
@@ -482,7 +482,7 @@ static void http_cb(struct ttg_conn* c, int ev, void* ev_data) {
           return;
         }
       } else if (ttg_http_get_header(&hm, "Content-length") == NULL) {
-        /* #2593: HTTP packets must contain either Transfer-Encoding or */
+        /* HTTP packets must contain either Transfer-Encoding or */
         /* Content-length */
         bool is_response = ncasecmp(hm.method.buf, "HTTP/", 5) == 0;
         bool require_content_len = false;

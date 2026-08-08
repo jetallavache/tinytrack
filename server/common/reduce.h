@@ -59,6 +59,7 @@ struct tt_reduce_actions {
   uint32_t count;                              /* Count */
 };
 
+/* ema */
 struct tt_reduce_accumulator* tt_reduce_ema_u16_create(void);
 void tt_reduce_ema_u16_accumulate(struct tt_reduce_accumulator* acc_ptr,
                                   const void* value, uint32_t count,
@@ -75,7 +76,7 @@ void tt_reduce_ema_u64_accumulate(struct tt_reduce_accumulator* acc_ptr,
                                   uint32_t index, bool is_last, void* out);
 void tt_reduce_ema_u64_destroy(struct tt_reduce_accumulator* acc_ptr);
 
-/* ... */
+/* latest */
 struct tt_reduce_accumulator* tt_reduce_latest_u64_create(void);
 void tt_reduce_latest_u64_accumulate(struct tt_reduce_accumulator* acc_ptr,
                                      const void* value, uint32_t count,

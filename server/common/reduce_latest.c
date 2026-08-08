@@ -24,9 +24,8 @@ void tt_reduce_latest_u64_accumulate(struct tt_reduce_accumulator* acc_ptr,
 
   /* If this is the final challenge, just write the result and exit. */
   if (is_last) {
-    if (out) {
+    if (out)
       *(uint64_t*)out = acc->last_value;
-    }
     return;
   }
 
@@ -41,9 +40,8 @@ void tt_reduce_latest_u64_accumulate(struct tt_reduce_accumulator* acc_ptr,
     acc->has_value = true;
   }
 
-  if (is_last && out) {
+  if (is_last && out)
     *(uint64_t*)out = acc->last_value;
-  }
 }
 
 void tt_reduce_latest_u64_destroy(struct tt_reduce_accumulator* acc_ptr) {

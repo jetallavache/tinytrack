@@ -19,6 +19,63 @@
 #include "watch.h"
 #include "writer.h"
 
+/*
+                         Linux Kernel
+                              │
+           ┌──────────────────┼──────────────────┐
+           │                  │                  │
+           ▼                  ▼                  ▼
+        /proc                /sys             netlink
+           │                  │                  │
+           └──────────────────┼──────────────────┘
+                              │
+                              ▼
+                           fetch
+                              │
+                              ▼
+                           metrics
+                              │
+                              ▼
+                           analyzer
+                              │
+                     ┌────────┴────────┐
+                     ▼                 ▼
+                   state             events
+                     │                 │
+                     └────────┬────────┘
+                              ▼
+                            writer
+
+                       Linux event sources
+                              │
+                              ▼
+                            epoll
+                              │
+                              ▼
+                           runtime
+                              │
+                              ▼
+                          scheduler
+                              │
+                              ▼
+                          pipeline
+*/
+
+/*
+| Задача                    | Механизм        |
+| ------------------------- | --------------- |
+| ждать несколько событий   | `epoll`         |
+| периодический sampling    | `timerfd`       |
+| graceful shutdown         | `signalfd`      |
+| IPC / пробуждение loop    | `eventfd`       |
+| network state changes     | `netlink`       |
+| CPU/memory statistics     | `/proc`         |
+| kernel/system information | `/sys`          |
+| filesystem statistics     | `statvfs`       |
+| process information       | `/proc/<pid>`   |
+| high-resolution time      | `clock_gettime` |
+*/
+
 static volatile sig_atomic_t running = 1;
 
 static void signal_handler(int sig) {

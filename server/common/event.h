@@ -73,6 +73,6 @@ enum tt_event_severity { TT_EVENT_INFO, TT_EVENT_WARNING, TT_EVENT_CRITICAL };
 // void tt_event_ex_serialize(const struct tt_event* m, uint8_t* buf);
 // void tt_event_ex_deserialize(const uint8_t* buf, struct tt_event* m);
 
-void tt_event_emit(uint16_t event_code, uint8_t component, uint16_t val);
+void tt_event_emit_fn(uint16_t event_code, uint8_t component, uint16_t val);
 
 #endif /* TT_EVENT_H */

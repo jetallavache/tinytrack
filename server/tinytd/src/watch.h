@@ -7,6 +7,11 @@
 #include "common/metrics.h"
 #include "writer.h"
 
+/**
+ * Ответственность:
+ * история, состояние, детекция, корреляция и генерация событий
+ */
+
 #define tt_metrics tt_metrics_ex
 
 /**

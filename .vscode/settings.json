@@ -25,9 +25,11 @@
     },
     "C_Cpp.errorSquiggles": "disabled",
     "cSpell.words": [
+        "детекция",
         "стейта",
         "aggr",
         "aggrs",
+        "filenr",
         "mempr"
     ]
 }

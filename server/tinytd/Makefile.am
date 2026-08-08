@@ -11,7 +11,9 @@ tinytd_SOURCES = \
 	src/config.c src/config.h \
 	src/writer.c src/writer.h \
 	src/debug.c src/debug.h \
-	src/reduce_config.c src/reduce_config.h
+	src/reduce_config.c src/reduce_config.h \
+	pipeline.c pipeline.h \
+	scheduler.c scheduler.h
 
 tinytd_CFLAGS = -I$(top_srcdir) $(AM_CFLAGS)
 tinytd_LDADD = $(top_builddir)/common/libcommon.a -lrt

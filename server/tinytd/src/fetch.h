@@ -9,6 +9,15 @@
 #include "common/sysfs.h"
 #include "trends.h"
 
+/**
+ * Ответственность:
+ * - `/proc`;
+ * - `/sys`;
+ * - `statvfs`;
+ * - возможно netlink-derived observations;
+ * - преобразование Linux данных → `tt_metrics`.
+ */
+
 #define TTD_STAT_BSIZE 100
 #define TTD_MEMINFO_BSIZE 100
 #define TTD_NET_BSIZE 1000
@@ -53,7 +62,7 @@ struct proc_meminfo {
 };
 
 /* Structure of the /proc/net data unit */
-struct proc_net {
+struct proc_net_dev {
   unsigned long rx_bytes; /* Received bytes */
   unsigned long tx_bytes; /* Transmitted bytes */
 };
@@ -84,18 +93,25 @@ struct proc_stat_pct {
   float total_pct;
 };
 
+struct proc_sys_fs_filenr {
+  unsigned long allocated;
+  unsigned long unused;
+  unsigned long max;
+};
+
 /* Structure of the direct_statvfs data unit */
 struct du_stat {
   float usage;               /* Usage percentage */
   unsigned long total_bytes; /* Total space in bytes */
   unsigned long free_bytes;  /* Available space in bytes */
+  float inodes_usage;
 };
 
 /* State of collector node */
 struct ttd_fetch_state {
   struct proc_stat pr_stat_prev;
   struct proc_stat_pct pr_stat_pct;
-  struct proc_net pr_net_prev;
+  struct proc_net_dev pr_net_prev;
   time_t net_time_prev;
   struct du_stat du_cached;
   time_t du_last_update;
@@ -105,9 +121,10 @@ struct ttd_fetch_state {
 struct ttd_fetch {
   struct proc_stat pr_stat;
   struct proc_meminfo pr_meminfo;
-  struct proc_net pr_net;
+  struct proc_net_dev pr_net;
   struct proc_loadavg pr_loadavg;
   struct proc_vmstat pr_vmstat;
+  struct proc_sys_fs_filenr pr_fs;
   struct du_stat du;
 
   struct ttd_fetch_state* state;
@@ -122,6 +139,7 @@ int ttd_fetch_disk(struct ttd_fetch* fch);
 
 /*...*/
 int ttd_fetch_oom_kills(struct ttd_fetch* fch);
+int ttd_fetch_fs(struct ttd_fetch* fch);
 
 /* Initialize/cleanup persistent file descriptors */
 void ttd_fetch_init(struct ttd_fetch* fch);

@@ -6,6 +6,12 @@
 #include "common/ringbuf.h"
 #include "config.h"
 
+/**
+ * Ответственность:
+ * - metrics - TSDB
+ * - events - event buffer
+ */
+
 /* Wrapper around ttr_writer for tinytd */
 struct ttd_writer {
   struct ttr_writer ring;

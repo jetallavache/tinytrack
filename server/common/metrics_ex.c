@@ -93,7 +93,7 @@ void tt_metrics_ex_deserialize(const uint8_t* buf, struct tt_metrics_ex* m) {
   off += 7;
 }
 
-void tt_metrics_ex_reduce(const void* samples, uint32_t count, size_t cell_size,
+void tt_metrics_ex_reduce_fn(const void* samples, uint32_t count, size_t cell_size,
                           void* out, const void* actions_ptr) {
   if (!samples || !out || count == 0)
     return;

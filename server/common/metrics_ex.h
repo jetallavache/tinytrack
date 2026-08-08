@@ -46,10 +46,11 @@ struct tt_metrics_ex {
   /* New fields for detect events */
 
   alignas(2) uint16_t oom_kill_count;   /* COUNTER,  From /proc/vmstat */
+  alignas(2) uint16_t inode_usage_pct;  /* Inodes % * 100 */
+  alignas(2) uint16_t fd_usage_pct;     /* File descriptors % * 100 */
+
   alignas(2) uint16_t procs_blocked;    /* Processes in D-state */
   alignas(2) uint16_t procs_zombie;     /* Processes in Z-state */
-  alignas(2) uint16_t fd_usage_pct;     /* File descriptors % * 100 */
-  alignas(2) uint16_t inode_usage_pct;  /* Inodes % * 100 */
   alignas(2) uint16_t top_consumer_pid; /* PID of the main CPU consumer */
   alignas(2) uint16_t top_consumer_pct; /* How much % CPU it uses */
   alignas(2) uint16_t top_rss_pid;      /* PID of the main RAM consumer */
@@ -99,11 +100,11 @@ void tt_metrics_ex_deserialize(const uint8_t* buf, struct tt_metrics_ex* m);
  * timestamp is set to the latest sample's timestamp.
  * @note Conforms to ttr_aggregate_fn signature.
  */
-void tt_metrics_ex_reduce(const void* samples, uint32_t count, size_t cell_size,
+void tt_metrics_ex_reduce_fn(const void* samples, uint32_t count, size_t cell_size,
                           void* out, const void* actions_ptr);
 
 /* Alias kept for backward compatibility — resolves to aggregate_avg. */
-#define tt_metrics_aggregate tt_metrics_ex_reduce
+#define tt_metrics_aggregate tt_metrics_ex_reduce_fn
 
 /**
  * @struct tt_agg_metrics_ex

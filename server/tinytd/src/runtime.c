@@ -30,7 +30,7 @@ static uint64_t now_ms(void) {
 
 //     /* Определяем, какие аспекты изменились */
 //     if (changed_bits & 0x0003) { /* availability изменилась */
-//       tt_event_emit(TT_EVENT_STATE_CHANGE, COMPONENT_MEM,
+//       tt_event_emit_fn(TT_EVENT_STATE_CHANGE, COMPONENT_MEM,
 //                     current->mem_state_flags & 0x0003);
 //     }
 
@@ -38,21 +38,21 @@ static uint64_t now_ms(void) {
 
 //     /* Проверяем на критические события */
 //     if ((current->mem_state_flags & 0x0003) == MEM_AVAIL_RED) {
-//       tt_event_emit(TT_EVENT_MEM_PRESSURE_HIGH, COMPONENT_MEM,
+//       tt_event_emit_fn(TT_EVENT_MEM_PRESSURE_HIGH, COMPONENT_MEM,
 //                     current->mem_usage_pct);
 //     }
 //   }
 
 //   /* Детектируем утечку памяти (нужен контекст из нескольких измерений) */
 //   // if (detect_memory_leak(last_n_measurements)) {
-//   //     tt_event_emit(TT_EVENT_MEM_LEAK_DETECTED,
+//   //     tt_event_emit_fn(TT_EVENT_MEM_LEAK_DETECTED,
 //   //               COMPONENT_MEM,
 //   //               calculate_leak_rate());
 //   // }
 
 //   /* Детектируем swap thrashing */
 //   // if (is_swap_thrashing(current, previous)) {
-//   //     tt_event_emit(TT_EVENT_MEM_SWAP_THRASHING,
+//   //     tt_event_emit_fn(TT_EVENT_MEM_SWAP_THRASHING,
 //   //               COMPONENT_MEM,
 //   //               current->mem_usage_pct);
 //   // }
@@ -108,6 +108,7 @@ static void fetch_metrics(struct ttd_fetch* fch, struct tt_metrics* sample) {
   } else {
     sample->du_total_bytes = (uint64_t)fch->state->du_cached.total_bytes;
     sample->du_free_bytes = (uint64_t)fch->state->du_cached.free_bytes;
+    sample->inode_usage_pct = (uint16_t)(fch->state->du_cached.inodes_usage * 100);
   }
 
   ret = ttd_fetch_oom_kills(fch);
@@ -115,6 +116,14 @@ static void fetch_metrics(struct ttd_fetch* fch, struct tt_metrics* sample) {
     tt_log_err("Failed to retrieve data from /proc/vmstat");
   } else {
     sample->oom_kill_count = (uint16_t)fch->pr_vmstat.oom_kill;
+  }
+
+  ret = ttd_fetch_fs(fch);
+  if (ret < 0) {
+    tt_log_err("Failed to retrieve data from /proc/sys/fs/file-nr");
+  } else {
+    if (fch->pr_fs.max > 0)
+      sample->fd_usage_pct = (uint16_t)((fch->pr_fs.allocated * 100 / fch->pr_fs.max) * 100);
   }
 }
 
@@ -129,9 +138,9 @@ int ttd_runtime_init(struct ttd_runtime* rt, struct ttd_config* cfg,
   rt->epoll_fd = -1;
   rt->timer_fd = -1;
   rt->cfg = cfg;
-  rt->fch = fch;
-  rt->watch = watch;
-  rt->writer = writer;
+  rt->fch = fch; /* Не здесь! */
+  rt->watch = watch; /* Не здесь! */
+  rt->writer = writer; /* Не здесь! */
   rt->next_l2 = 0;
   rt->next_l3 = 0;
   rt->next_le = 0;

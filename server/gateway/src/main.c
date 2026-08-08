@@ -251,6 +251,7 @@ int main(int argc, char** argv) {
   mgr.idle_timeout_ms = cfg.idle_timeout_ms;
   mgr.max_uri_size = cfg.max_uri_size ? cfg.max_uri_size : 8192;
   mgr.max_headers_size = cfg.max_headers_size ? cfg.max_headers_size : 16384;
+
   if (use_tls && !mgr.tls_ctx) {
     tt_log_err("TLS        context init failed — check cert/key files");
     tt_log_err("  See https://tinytrack.dev/docs/troubleshooting#tls-init");
