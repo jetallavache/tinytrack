@@ -8,7 +8,7 @@
 #include "watch.h"
 #include "writer.h"
 
-/**
+/*
  * runtime - event loop
  *
  * Как ждать события?
@@ -64,6 +64,12 @@
  *        └── other events
  */
 
+#define TTD_RUNTIME_INIT \
+{ \
+    .epoll_fd = -1, \
+    .timer_fd = -1, \
+}
+
 enum ttd_runtime_state {
     TTD_RUNNING,
     TTD_STOPPING,
@@ -83,6 +89,12 @@ struct ttd_runtime {
   uint64_t next_l3;
   uint64_t next_le;
   uint64_t next_shadow;
+
+  // int epoll_fd;
+  // int timer_fd;
+
+  // struct ttd_scheduler *scheduler;
+  // struct ttd_pipeline *pipeline;
 };
 
 int ttd_runtime_init(struct ttd_runtime* rt, struct ttd_config* cfg,

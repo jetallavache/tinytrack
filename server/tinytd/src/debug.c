@@ -105,6 +105,7 @@ void ttd_debug_dump_agg(int level, const struct tt_metrics* agg, uint32_t head,
   metrics_printf(agg);
 }
 
+/* слишком козырно передавать конфиг целиком, надо хранить статически capacities и intervals отдельно */
 void ttd_debug_dump_le(const void* live_addr, struct ttd_config* cfg) {
   size_t cs = sizeof(struct tt_event);
 

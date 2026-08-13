@@ -13,11 +13,14 @@
 #include "debug.h"
 #include "mem.h"
 
+#define TT_MAX_EVENTS 8
+
 #define tt_metrics tt_metrics_ex
 
 static uint64_t now_ms(void) {
   struct timeval tv;
   gettimeofday(&tv, NULL);
+  // clock_gettime(CLOCK_MONOTONIC);
   return (uint64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
 }
 
@@ -27,29 +30,24 @@ static uint64_t now_ms(void) {
 //   if (current->mem_state_flags != previous->mem_state_flags) {
 //     uint16_t changed_bits =
 //         current->mem_state_flags ^ previous->mem_state_flags;
-
 //     /* Определяем, какие аспекты изменились */
 //     if (changed_bits & 0x0003) { /* availability изменилась */
 //       tt_event_emit_fn(TT_EVENT_STATE_CHANGE, COMPONENT_MEM,
 //                     current->mem_state_flags & 0x0003);
 //     }
-
 // #define MEM_AVAIL_RED 3
-
 //     /* Проверяем на критические события */
 //     if ((current->mem_state_flags & 0x0003) == MEM_AVAIL_RED) {
 //       tt_event_emit_fn(TT_EVENT_MEM_PRESSURE_HIGH, COMPONENT_MEM,
 //                     current->mem_usage_pct);
 //     }
 //   }
-
 //   /* Детектируем утечку памяти (нужен контекст из нескольких измерений) */
 //   // if (detect_memory_leak(last_n_measurements)) {
 //   //     tt_event_emit_fn(TT_EVENT_MEM_LEAK_DETECTED,
 //   //               COMPONENT_MEM,
 //   //               calculate_leak_rate());
 //   // }
-
 //   /* Детектируем swap thrashing */
 //   // if (is_swap_thrashing(current, previous)) {
 //   //     tt_event_emit_fn(TT_EVENT_MEM_SWAP_THRASHING,
@@ -58,6 +56,12 @@ static uint64_t now_ms(void) {
 //   // }
 // }
 
+/**
+ * Это точно переместить в fetch
+ * Также будет разделение на получение writable data и non-writable data
+ * > transmitted metrics
+ * > service/auxiliary metrics
+ */
 static void fetch_metrics(struct ttd_fetch* fch, struct tt_metrics* sample) {
   if (!fch || !sample) {
     tt_log_err("Invalid parameters to fetch_metrics");
@@ -178,6 +182,7 @@ int ttd_runtime_init(struct ttd_runtime* rt, struct ttd_config* cfg,
 
 void ttd_runtime_poll(struct ttd_runtime* rt, int timeout_ms) {
   struct epoll_event events[1];
+  /* struct epoll_event events[MAX_EVENTS]; */
 
   if (!rt || !rt->writer) {
     tt_log_err("Invalid runtime state: rt=%p, writer=%p", (void*)rt,
@@ -185,6 +190,7 @@ void ttd_runtime_poll(struct ttd_runtime* rt, int timeout_ms) {
     return;
   }
 
+  /* Вместо 1 -> MAX_EVENTS */
   int nfds = epoll_wait(rt->epoll_fd, events, 1, timeout_ms);
   if (nfds < 0 && errno != EINTR) {
     tt_log_err("epoll_wait failed: %s", strerror(errno));
@@ -199,20 +205,19 @@ void ttd_runtime_poll(struct ttd_runtime* rt, int timeout_ms) {
     if (read(rt->timer_fd, &expirations, sizeof(expirations)) < 0)
       expirations = 0;
 
-    /* tt_log_debug("Timer fired, collecting metrics (rt=%p, writer=%p)",
-                 (void*)rt, (void*)rt->writer); */
+    tt_log_debug("Timer fired, collecting metrics (rt=%p, writer=%p)",
+                 (void*)rt, (void*)rt->writer);
 
     struct tt_metrics m = {0};
     m.timestamp = (uint64_t)time(NULL) * 1000;
     fetch_metrics(rt->fch, &m);
-
     ttd_writer_write_l1(rt->writer, &m);
-
     ttd_debug_dump_l1(rt->writer->ring.live_addr, rt->cfg->l1_capacity);
 
     if (tt_timer_expired(&rt->next_le, rt->cfg->le_check_interval_sec * 1000,
                          now)) {
       ttd_watch_metrics(rt->watch, &m, rt->writer);
+      /* слишком козырно передавать конфиг целиком, надо хранить статически capacities и intervals отдельно */
       ttd_debug_dump_le(rt->writer->ring.live_addr, rt->cfg);
     }
   }
@@ -234,6 +239,23 @@ void ttd_runtime_poll(struct ttd_runtime* rt, int timeout_ms) {
     ttd_debug_dump_rusage();
   }
 }
+
+// int ttd_runtime_run(struct ttd_runtime *rt)
+// {
+//     while (!rt->shutdown) {
+//         int event = ttd_runtime_wait(rt);
+//         if (event == TTD_RUNTIME_TIMER) {
+//             enum ttd_job job =
+//                 ttd_scheduler_next(&rt->scheduler);
+//             if (job != TTD_JOB_NONE)
+//                 ttd_pipeline_run(&rt->pipeline, job);
+//         }
+//         if (event == TTD_RUNTIME_SIGNAL) {
+//             ttd_runtime_request_shutdown(rt);
+//         }
+//     }
+//     return 0;
+// }
 
 void ttd_runtime_free(struct ttd_runtime* rt) {
   if (rt->timer_fd >= 0) {

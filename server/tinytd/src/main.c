@@ -16,6 +16,8 @@
 #include "config.h"
 #include "fetch.h"
 #include "runtime.h"
+#include "pipeline.h"
+#include "scheduler.h"
 #include "watch.h"
 #include "writer.h"
 
@@ -179,7 +181,11 @@ int main(int argc, char** argv) {
   struct ttd_writer writer = {0};
   struct ttd_fetch fch = {0};
   struct ttd_watch watch = {0};
+  struct ttd_pipeline pip = {0};
+  struct ttd_scheduler schema = {0};
+
   struct ttd_runtime rt = {0};
+
   int do_daemonize = 1;
   const char* config_path = NULL;
 
@@ -280,6 +286,32 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+
+  /* ......... */
+
+  // ttd_pipeline_init(
+  //       &pipeline,
+  //       &fetch,
+  //       &analyzer,
+  //       &writer
+  //   );
+
+  //   ttd_runtime_init(
+  //       &runtime,
+  //       &scheduler,
+  //       &pipeline
+  //   );
+
+  //   ttd_runtime_run(&runtime);
+
+  //   ttd_runtime_free(&runtime);
+  //   ttd_pipeline_free(&pipeline);
+  //   ttd_analyzer_free(&analyzer);
+  //   ttd_fetch_cleanup();
+  //   ttd_writer_cleanup(&writer);
+
+  /* ........... */
+
   if (write_pid_file(cfg.pid_file) < 0)
     tt_log_warning("PID file   cannot write %s (non-fatal)", cfg.pid_file);
 
@@ -325,6 +357,14 @@ int main(int argc, char** argv) {
     ttd_runtime_poll(&rt, 1000);
 
   tt_log_notice("tinytd shutting down...");
+  /**
+   * После получения сигнала о завершении работы необходимо безопасно закончить работу всех модулей:
+   * stop scheduler - остановить планировщик
+   * flush pipeline - выполнить последний запланированный конвейер
+   * sync writer - выполнить синхронизацию данных (shadow sync)
+   * close resources - закрыть все ресурсы (файловые дескрипторы, очистить память)
+   * exit
+   */
   cleanup(&rt, &fch, &watch, &writer, cfg.pid_file);
   tt_log_shutdown();
 

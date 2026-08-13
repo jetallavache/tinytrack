@@ -45,6 +45,10 @@ struct ttd_watch {
 
   struct ttd_watch_latest last;
   struct ttd_watch_leaks leaks;
+
+  // struct ttd_watch_state state;
+  // struct ttd_event_buffer *events;
+  // struct ttd_trends *trends;
 };
 
 void ttd_watch_metrics(struct ttd_watch* watch, struct tt_metrics* current,
